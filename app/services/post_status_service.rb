@@ -14,14 +14,15 @@ class PostStatusService < BaseService
   # @return [Status]
   def call(account, text, in_reply_to = nil, options = {})
     media  = validate_media!(options[:media_ids])
-    puts "HI"
-    puts text
     text_without_urls= text.gsub(/http.?:\/\/[^\s\\]+/, '')
-    puts text_without_urls
     text_without_urls= text_without_urls.gsub(/@[^\s\\]+@[^\s\\]+\.[a-z]+/, '')
-    puts text_without_urls
+    if options[:spoiler_text]
+      spoiler = options[:spoiler_text]
+    else
+      spoiler = ""
+    end
     raise Mastodon::ValidationError, 'Invalid symbol' if text_without_urls.gsub(/[^[:word:]]|[0-9]/,'').gsub('_','').match(/[^eE]/)
-    raise Mastodon::ValidationError, 'Invalid symbol' if options[:spoiler_text].gsub(/[^[:word:]]|[0-9]/,'').gsub('_','').match(/[^eE]/)
+    raise Mastodon::ValidationError, 'Invalid symbol' if spoiler.gsub(/[^[:word:]]|[0-9]/,'').gsub('_','').match(/[^eE]/)
     status = account.statuses.create!(text: text,
                                       thread: in_reply_to,
                                       sensitive: options[:sensitive],
