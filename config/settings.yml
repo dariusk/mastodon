@@ -17,6 +17,7 @@ defaults: &defaults
   open_registrations: true
   closed_registrations_message: 'This instance is not accepting registrations at this time. EEEEE.'
   boost_modal: true
+  auto_play_gif: true
   notification_emails:
     follow: false
     reblog: false
