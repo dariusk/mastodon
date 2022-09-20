@@ -11,33 +11,40 @@ class PostStatusService < BaseService
   # @option [String] :spoiler_text
   # @option [Enumerable] :media_ids Optional array of media IDs to attach
   # @option [Doorkeeper::Application] :application
+  # @option [String] :idempotency Optional idempotency key
   # @return [Status]
   def call(account, text, in_reply_to = nil, options = {})
+    if options[:idempotency].present?
+      existing_id = redis.get("idempotency:status:#{account.id}:#{options[:idempotency]}")
+      return Status.find(existing_id) if existing_id
+    end
+
     media  = validate_media!(options[:media_ids])
     text_without_urls= text.gsub(/http.?:\/\/[^\s\\]+/, '')
     text_without_urls= text_without_urls.gsub(/@[^\s\\]+@[^\s\\]+\.[a-z]+/, '')
-    if options[:spoiler_text]
-      spoiler = options[:spoiler_text]
-    else
-      spoiler = ""
-    end
     raise Mastodon::ValidationError, 'Invalid symbol' if text_without_urls.gsub(/[^[:word:]]|[0-9]/,'').gsub('_','').match(/[^eE]/)
     raise Mastodon::ValidationError, 'Invalid symbol' if spoiler.gsub(/[^[:word:]]|[0-9]/,'').gsub('_','').match(/[^eE]/)
-    status = account.statuses.create!(text: text,
-                                      thread: in_reply_to,
-                                      sensitive: options[:sensitive],
-                                      spoiler_text: options[:spoiler_text] || '',
-                                      visibility: options[:visibility],
-                                      language: detect_language_for(text, account),
-                                      application: options[:application])
-
-    attach_media(status, media)
+    status = nil
+    ApplicationRecord.transaction do
+      status = account.statuses.create!(text: text,
+                                        thread: in_reply_to,
+                                        sensitive: options[:sensitive],
+                                        spoiler_text: options[:spoiler_text] || '',
+                                        visibility: options[:visibility],
+                                        language: detect_language_for(text, account),
+                                        application: options[:application])
+      attach_media(status, media)
+    end
     process_mentions_service.call(status)
     process_hashtags_service.call(status)
 
-    LinkCrawlWorker.perform_async(status.id)
+    LinkCrawlWorker.perform_async(status.id) unless status.spoiler_text.present?
     DistributionWorker.perform_async(status.id)
     Pubsubhubbub::DistributionWorker.perform_async(status.stream_entry.id)
+
+    if options[:idempotency].present?
+      redis.setex("idempotency:status:#{account.id}:#{options[:idempotency]}", 3_600, status.id)
+    end
 
     status
   end
@@ -71,5 +78,9 @@ class PostStatusService < BaseService
 
   def process_hashtags_service
     @process_hashtags_service ||= ProcessHashtagsService.new
+  end
+
+  def redis
+    Redis.current
   end
 end
