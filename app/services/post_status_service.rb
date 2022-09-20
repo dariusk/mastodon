@@ -25,6 +25,7 @@ class PostStatusService < BaseService
     raise Mastodon::ValidationError, 'Invalid symbol' if text_without_urls.gsub(/[^[:word:]]|[0-9]/,'').gsub('_','').match(/[^eE]/)
     raise Mastodon::ValidationError, 'Invalid symbol' if options[:spoiler_text].gsub(/[^[:word:]]|[0-9]/,'').gsub('_','').match(/[^eE]/)
     status = nil
+
     ApplicationRecord.transaction do
       status = account.statuses.create!(text: text,
                                         thread: in_reply_to,
@@ -35,6 +36,7 @@ class PostStatusService < BaseService
                                         application: options[:application])
       attach_media(status, media)
     end
+
     process_mentions_service.call(status)
     process_hashtags_service.call(status)
 
