@@ -43,6 +43,7 @@ defaults: &defaults
     - root
     - webmaster
     - administrator
+  bootstrap_timeline_accounts: ''
 
 development:
   <<: *defaults
